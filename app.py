@@ -91,7 +91,7 @@ if filtered_df.empty:
 else:
     place_selected = st.selectbox("Pilih Tempat Wisata", options=filtered_df['Place_Name'].values)
 
-    if st.button("Cari Rekomendasi Mirip"):
+    if st.button("Cari Rekomendasi"):
         recommendations = get_recommendations(place_selected, top_n=5)
         if recommendations.empty:
             st.info("Tempat wisata tidak ditemukan dalam dataset atau tidak ada rekomendasi.")
