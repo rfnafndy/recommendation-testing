@@ -35,25 +35,25 @@ min_rating = st.slider("Rating Minimum",
                        max_value=float(destinasiData['Rating'].max()), 
                        value=float(destinasiData['Rating'].min()))
 
-# Filter data sesuai pilihan user
-filtered_df = destinasiData[
-    (destinasiData['City'] == selected_city) &
-    (destinasiData['Category'] == selected_category) &
-    (destinasiData['Price'] <= max_price) &
-    (destinasiData['Rating'] >= min_rating)
-]
+if st.button("Cari Rekomendasi"):
+    filtered_df = destinasiData[
+        (destinasiData['City'] == selected_city) &
+        (destinasiData['Category'] == selected_category) &
+        (destinasiData['Price'] <= max_price) &
+        (destinasiData['Rating'] >= min_rating)
+    ]
 
-if filtered_df.empty:
-    st.warning("Tidak ada tempat wisata yang sesuai dengan filter.")
-else:
-    st.subheader(f"Tempat Wisata di {selected_city} dengan kategori {selected_category}:")
-    for idx, row in filtered_df.iterrows():
-        st.markdown(f"### {row['Place_Name']} (Rating: {row['Rating']}, Harga: Rp{row['Price']})")
-        st.write(row['Description'])
-        # Tampilkan rekomendasi mirip untuk tempat ini
-        recommendations = get_recommendations_by_index(idx, top_n=3)
-        if not recommendations.empty:
-            st.markdown("**Rekomendasi Tempat Wisata Mirip:**")
-            for _, rec in recommendations.iterrows():
-                st.write(f"- {rec['Place_Name']} ({rec['City']}) - Rating: {rec['Rating']}, Harga: Rp{rec['Price']}")
-        st.write("---")
+    if filtered_df.empty:
+        st.warning("Tidak ada tempat wisata yang sesuai dengan filter.")
+    else:
+        st.subheader(f"Tempat Wisata di {selected_city} dengan kategori {selected_category}:")
+        for idx, row in filtered_df.iterrows():
+            st.markdown(f"### {row['Place_Name']} (Rating: {row['Rating']}, Harga: Rp{row['Price']})")
+            st.write(row['Description'])
+            # Tampilkan rekomendasi mirip untuk tempat ini
+            recommendations = get_recommendations_by_index(idx, top_n=3)
+            if not recommendations.empty:
+                st.markdown("**Rekomendasi Tempat Wisata Mirip:**")
+                for _, rec in recommendations.iterrows():
+                    st.write(f"- {rec['Place_Name']} ({rec['City']}) - Rating: {rec['Rating']}, Harga: Rp{rec['Price']}")
+            st.write("---")
