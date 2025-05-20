@@ -24,9 +24,9 @@ def get_recommendations_by_index(idx, top_n=5):
     recommended_indices = [i[0] for i in sim_scores]
     return destinasiData.iloc[recommended_indices][['Place_Name', 'Category', 'City', 'Price', 'Rating', 'Description']]
 
-st.title("Sistem Rekomendasi Tempat Wisata")
+st.title("Sistem Rekomendasi Tempat Wisata (Content-Based Filtering)")
 
-# Input filter user
+# Filter input user
 selected_city = st.selectbox("Pilih Kota", options=sorted(destinasiData['City'].unique()))
 selected_category = st.selectbox("Pilih Kategori", options=sorted(destinasiData['Category'].unique()))
 max_price = st.number_input("Harga Maksimal (Rp)", min_value=0, value=int(destinasiData['Price'].max()))
@@ -46,15 +46,11 @@ if st.button("Cari Rekomendasi"):
     if filtered_df.empty:
         st.warning("Tidak ada tempat wisata yang sesuai dengan filter.")
     else:
-        # Ambil 5 tempat teratas berdasarkan rating
-        top5 = filtered_df.sort_values(by='Rating', ascending=False).head(5)
-
-        st.subheader(f"5 Tempat Wisata Teratas di {selected_city} dengan kategori {selected_category}:")
-        for idx, row in top5.iterrows():
+        st.subheader(f"Tempat Wisata di {selected_city} dengan kategori {selected_category}:")
+        for idx, row in filtered_df.iterrows():
             st.markdown(f"### {row['Place_Name']} (Rating: {row['Rating']}, Harga: Rp{row['Price']})")
             st.write(row['Description'])
-
-            # Rekomendasi mirip berdasarkan index tempat ini
+            # Tampilkan rekomendasi mirip untuk tempat ini
             recommendations = get_recommendations_by_index(idx, top_n=3)
             if not recommendations.empty:
                 st.markdown("**Rekomendasi Tempat Wisata Mirip:**")
