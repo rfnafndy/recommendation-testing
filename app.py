@@ -1,44 +1,26 @@
-import streamlit as st
+# -*- coding: utf-8 -*-
 import pandas as pd
+import streamlit as st
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Load data
-@st.cache_data
-def load_data():
-    df = pd.read_csv('destinasi.csv')
-    # Drop kolom tidak perlu
-    df.drop(columns=["Place_Id", "Time_Minutes", "Unnamed: 11", "Unnamed: 12", "Coordinate", "Lat", "Long"], inplace=True)
-    return df
+destinasiData = pd.read_csv('destinasi.csv')
+destinasiData.drop(columns=["Place_Id", "Time_Minutes", "Unnamed: 11", "Unnamed: 12", "Coordinate", "Lat", "Long"], inplace=True)
+destinasiData.reset_index(drop=True, inplace=True)
 
-destinasiData = load_data()
+# Preprocessing fitur
+encoder = OneHotEncoder(sparse=False)
+encoded_cat_city = encoder.fit_transform(destinasiData[['Category', 'City']])
 
-# --- Preprocessing fitur ---
-@st.cache_data
-def preprocess_features(df):
-    # One-hot encode Category & City
-    encoder = OneHotEncoder(sparse=False)
-    encoded_cat_city = encoder.fit_transform(df[['Category', 'City']])
-    
-    # Normalisasi Price dan Rating
-    scaler = MinMaxScaler()
-    scaled_price_rating = scaler.fit_transform(df[['Price', 'Rating']])
-    
-    # Gabungkan semua fitur
-    combined_features = np.hstack((encoded_cat_city, scaled_price_rating))
-    return combined_features, encoder, scaler
+scaler = MinMaxScaler()
+scaled_price_rating = scaler.fit_transform(destinasiData[['Price', 'Rating']])
 
-features_matrix, encoder, scaler = preprocess_features(destinasiData)
+combined_features = np.hstack((encoded_cat_city, scaled_price_rating))
 
-# Hitung similarity matrix (cosine similarity)
-@st.cache_data
-def calculate_similarity(matrix):
-    return cosine_similarity(matrix)
+similarity_matrix = cosine_similarity(combined_features)
 
-similarity_matrix = calculate_similarity(features_matrix)
-
-# Fungsi rekomendasi
 def get_recommendations(place_name, top_n=5):
     place_name_lower = place_name.lower()
     mask = destinasiData['Place_Name'].str.lower() == place_name_lower
@@ -53,13 +35,11 @@ def get_recommendations(place_name, top_n=5):
 # --- Streamlit UI ---
 st.title("Sistem Rekomendasi Tempat Wisata (Content-Based Filtering)")
 
-# Filter input user
 selected_city = st.selectbox("Pilih Kota", options=sorted(destinasiData['City'].unique()))
 selected_category = st.selectbox("Pilih Kategori", options=sorted(destinasiData['Category'].unique()))
 max_price = st.number_input("Harga Maksimal (Rp)", min_value=0, value=int(destinasiData['Price'].max()))
 min_rating = st.slider("Rating Minimum", min_value=float(destinasiData['Rating'].min()), max_value=float(destinasiData['Rating'].max()), value=float(destinasiData['Rating'].min()))
 
-# Filter data berdasarkan input
 filtered_df = destinasiData[
     (destinasiData['City'] == selected_city) &
     (destinasiData['Category'] == selected_category) &
@@ -70,9 +50,7 @@ filtered_df = destinasiData[
 if filtered_df.empty:
     st.warning("Tidak ada tempat wisata yang sesuai dengan filter.")
 else:
-    # Tampilkan list nama tempat wisata untuk dipilih
     place_selected = st.selectbox("Pilih Tempat Wisata", options=filtered_df['Place_Name'].values)
-    
     if st.button("Cari Rekomendasi Mirip"):
         recommendations = get_recommendations(place_selected, top_n=5)
         if recommendations is None or recommendations.empty:
