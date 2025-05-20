@@ -22,7 +22,7 @@ destinasiData.reset_index(drop=True, inplace=True)
 # ============================
 
 # One-hot encoding untuk 'Category' dan 'City'
-encoder = OneHotEncoder(sparse=False)
+encoder = OneHotEncoder(sparse_output=False)
 encoded_features = encoder.fit_transform(destinasiData[['Category', 'City']])
 
 # Normalisasi kolom 'Price' dan 'Rating'
