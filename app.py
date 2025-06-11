@@ -1,63 +1,102 @@
+# streamlit_app.py
+import streamlit as st
 import pandas as pd
 import numpy as np
-import streamlit as st
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
+import re
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-# Load data dan preprocess
-destinasiData = pd.read_csv('destinasi.csv')
-destinasiData.drop(columns=["Place_Id", "Time_Minutes", "Unnamed: 11", "Unnamed: 12", "Coordinate", "Lat", "Long"], inplace=True)
-destinasiData.reset_index(drop=True, inplace=True)
+# --- 1. INISIALISASI STEMMER ---
+stemmer = StemmerFactory().create_stemmer()
 
-# Feature Engineering
-encoder = OneHotEncoder(sparse_output=False)
-encoded_features = encoder.fit_transform(destinasiData[['Category', 'City']])
-scaler = MinMaxScaler()
-scaled_features = scaler.fit_transform(destinasiData[['Price', 'Rating']])
-combined_features = np.hstack((encoded_features, scaled_features))
-similarity_matrix = cosine_similarity(combined_features)
+# --- 2. FUNGSI MEMBERSIHKAN TEKS ---
+def bersihkan_text(teks):
+    teks = str(teks).lower()
+    teks = re.sub(r'[^a-z0-9\s]', ' ', teks)
+    teks = re.sub(r'\s+', ' ', teks).strip()
+    return stemmer.stem(teks)
 
-def get_recommendations_by_index(idx, top_n=5):
-    sim_scores_raw = similarity_matrix[idx]
-    sim_scores = list(enumerate(sim_scores_raw))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:top_n+1]
-    recommended_indices = [i[0] for i in sim_scores]
-    return destinasiData.iloc[recommended_indices][['Place_Name', 'Category', 'City', 'Price', 'Rating', 'Description']]
+# --- 3. LOAD DATA ---
+@st.cache_data
+def load_data():
+    destinasi = pd.read_csv("destinasi.csv")
+    rating = pd.read_csv("rating.csv")
 
-st.title("Sistem Rekomendasi Tempat Wisata")
+    destinasi.drop(columns=['Coordinate', 'Lat', 'Long', 'Unnamed: 11', 'Unnamed: 12', 'Time_Minutes'],
+                   errors='ignore', inplace=True)
 
-# Input filter user
-selected_city = st.selectbox("Pilih Kota", options=sorted(destinasiData['City'].unique()))
-selected_category = st.selectbox("Pilih Kategori", options=sorted(destinasiData['Category'].unique()))
-max_price = st.number_input("Harga Maksimal (Rp)", min_value=0, value=int(destinasiData['Price'].max()))
-min_rating = st.slider("Rating Minimum", 
-                       min_value=float(destinasiData['Rating'].min()), 
-                       max_value=float(destinasiData['Rating'].max()), 
-                       value=float(destinasiData['Rating'].min()))
+    data = pd.merge(rating, destinasi, on='Place_Id', how='left')
+    data.drop_duplicates(subset=['Place_Name'], inplace=True)
+    data = data.reset_index(drop=True)
 
-if st.button("Cari Rekomendasi"):
-    filtered_df = destinasiData[
-        (destinasiData['City'] == selected_city) &
-        (destinasiData['Category'] == selected_category) &
-        (destinasiData['Price'] <= max_price) &
-        (destinasiData['Rating'] >= min_rating)
-    ]
+    data['Clean_Desc'] = data['Description'].fillna('').apply(bersihkan_text)
+    data['Clean_Category'] = data['Category'].fillna('').apply(bersihkan_text)
+    data['Features'] = data['Clean_Desc'] + ' ' + data['Clean_Category']
 
-    if filtered_df.empty:
-        st.warning("Tidak ada tempat wisata yang sesuai dengan filter.")
+    return data
+
+# --- 4. FUNGSI REKOMENDASI ---
+def buat_model(data):
+    tfidf = TfidfVectorizer(stop_words='english', max_df=0.8, min_df=2)
+    tfidf_matrix = tfidf.fit_transform(data['Features'])
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    return cosine_sim
+
+def rekomendasi_wisata(data, cosine_sim, nama_tempat, k=5, lokasi=None, harga_max=None, rating_min=None):
+    nama_tempat = nama_tempat.lower()
+    matches = data[data['Place_Name'].str.lower() == nama_tempat]
+
+    if matches.empty:
+        return f"❌ Tempat wisata '{nama_tempat}' tidak ditemukan."
+
+    idx = matches.index[0]
+    similarity_scores = list(enumerate(cosine_sim[idx]))
+    similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+
+    rekomendasi_df = pd.DataFrame([
+        {
+            'Place_Name': data.at[i, 'Place_Name'],
+            'Category': data.at[i, 'Category'],
+            'Location': data.at[i, 'City'] if 'City' in data.columns else '',
+            'Price': data.at[i, 'Price'],
+            'Rating': data.at[i, 'Rating'],
+            'Similarity': round(score, 3)
+        }
+        for i, score in similarity_scores[1:]
+        if i != idx
+    ])
+
+    if lokasi:
+        rekomendasi_df = rekomendasi_df[rekomendasi_df['Location'].str.lower() == lokasi.lower()]
+    if harga_max is not None:
+        rekomendasi_df = rekomendasi_df[rekomendasi_df['Price'].fillna(0) <= harga_max]
+    if rating_min is not None:
+        rekomendasi_df = rekomendasi_df[rekomendasi_df['Rating'].fillna(0) >= rating_min]
+
+    return rekomendasi_df.head(k) if not rekomendasi_df.empty else "Tidak ada rekomendasi sesuai filter."
+
+# --- 5. UI STREAMLIT ---
+st.set_page_config(page_title="Rekomendasi Wisata", layout="wide")
+st.title("🌍 Sistem Rekomendasi Tempat Wisata")
+
+data = load_data()
+cosine_sim = buat_model(data)
+
+# Input pengguna
+nama_tempat = st.text_input("Nama Tempat yang Pernah Dikunjungi", placeholder="Misal: Kota Tua")
+k = st.slider("Jumlah Rekomendasi", 1, 10, 5)
+lokasi = st.text_input("Filter Lokasi (Opsional)", placeholder="Misal: Jakarta")
+harga_max = st.number_input("Harga Maksimum (Opsional)", min_value=0, value=100000)
+rating_min = st.slider("Rating Minimum (Opsional)", 0.0, 5.0, 4.0, 0.1)
+
+if st.button("Tampilkan Rekomendasi"):
+    if nama_tempat.strip() == "":
+        st.warning("Mohon isi nama tempat terlebih dahulu.")
     else:
-        # Ambil 5 tempat teratas berdasarkan rating
-        top5 = filtered_df.sort_values(by='Rating', ascending=False).head(5)
-
-        st.subheader(f"5 Tempat Wisata Teratas di {selected_city} dengan kategori {selected_category}:")
-        for idx, row in top5.iterrows():
-            st.markdown(f"### {row['Place_Name']} (Rating: {row['Rating']}, Harga: Rp{row['Price']})")
-            st.write(row['Description'])
-
-            # Rekomendasi mirip berdasarkan index tempat ini
-            recommendations = get_recommendations_by_index(idx, top_n=3)
-            if not recommendations.empty:
-                st.markdown("**Rekomendasi Tempat Wisata Mirip:**")
-                for _, rec in recommendations.iterrows():
-                    st.write(f"- {rec['Place_Name']} ({rec['City']}) - Rating: {rec['Rating']}, Harga: Rp{rec['Price']}")
-            st.write("---")
+        hasil = rekomendasi_wisata(data, cosine_sim, nama_tempat, k, lokasi, harga_max, rating_min)
+        if isinstance(hasil, pd.DataFrame):
+            st.success(f"Hasil Rekomendasi Mirip '{nama_tempat.title()}':")
+            st.dataframe(hasil, use_container_width=True)
+        else:
+            st.error(hasil)
