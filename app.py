@@ -48,7 +48,7 @@ def rekomendasi_wisata(data, cosine_sim, nama_tempat, k=5, lokasi=None, harga_ma
     matches = data[data['Place_Name'].str.lower() == nama_tempat]
 
     if matches.empty:
-        return f"❌ Tempat wisata '{nama_tempat}' tidak ditemukan."
+        return f"Tempat wisata '{nama_tempat}' tidak ditemukan."
 
     idx = matches.index[0]
     similarity_scores = list(enumerate(cosine_sim[idx]))
@@ -78,7 +78,7 @@ def rekomendasi_wisata(data, cosine_sim, nama_tempat, k=5, lokasi=None, harga_ma
 
 # --- 5. UI STREAMLIT ---
 st.set_page_config(page_title="Rekomendasi Wisata", layout="wide")
-st.title("🌍 Sistem Rekomendasi Tempat Wisata")
+st.title("Sistem Rekomendasi Tempat Wisata")
 
 data = load_data()
 cosine_sim = buat_model(data)
